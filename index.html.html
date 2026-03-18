@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Finlo Pro — Money Pots</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  
+  const firebaseConfig = {
+    apiKey: "AIzaSyDo5DJbTumkL5GZ7wbudOYQCqsOTFugeHM",
+    authDomain: "spending-tracker-7a8d9.firebaseapp.com",
+    projectId: "spending-tracker-7a8d9",
+    storageBucket: "spending-tracker-7a8d9.firebasestorage.app",
+    messagingSenderId: "550887794312",
+    appId: "1:550887794312:web:fb9f0e0c5eef2040dfa13d"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+
+  let currentUser = null;
+
+  // Expose to global scope
+  window._fb = { auth, db, provider, signInWithPopup, signOut, doc, getDoc, setDoc };
+
+  // Auth state listener
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      currentUser = user;
+      window._fbUser = user;
+      // Load data from Firestore
+      await window.loadFromFirestore();
+      // Update UI
+      document.getElementById('fb-user-name').textContent = user.displayName || user.email;
+      document.getElementById('fb-user-avatar').src = user.photoURL || '';
+      document.getElementById('fb-user-avatar').style.display = user.photoURL ? 'block' : 'none';
+      document.getElementById('fb-login-btn').style.display = 'none';
+      document.getElementById('fb-user-info').style.display = 'flex';
+      document.getElementById('fb-login-overlay').style.display = 'none';
+    } else {
+      currentUser = null;
+      window._fbUser = null;
+      document.getElementById('fb-login-btn').style.display = 'flex';
+      document.getElementById('fb-user-info').style.display = 'none';
+      document.getElementById('fb-login-overlay').style.display = 'flex';
+    }
+  });
+</script>
+<style>
+:root{
+  --bg:#080808;--bg2:#0e0e0e;--surface:#141414;--surface2:#1c1c1c;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --gold:#c9a84c;--gold2:#e8cc7a;--goldglow:rgba(201,168,76,0.15);
+  --green:#4caf82;--red:#e05e5e;--amber:#e09a3a;--blue:#5b9cf6;
+  --text:#f0ede6;--text2:#9e9b94;--text3:#5a5753;
+  --cash-c:#4caf82;--qr-c:#5b9cf6;--card-c:#c9a84c;
+  --r:16px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:0.4;}
+.wrap{max-width:430px;margin:0 auto;padding:0 20px 80px;position:relative;z-index:1;}
+
+/* ── DESKTOP SIDEBAR LAYOUT ── */
+@media(min-width:768px){
+  body{overflow:hidden;height:100vh;}
+  .wrap{display:none;}
+
+  /* APP SHELL */
+  .d-shell{display:flex;height:100vh;position:relative;z-index:1;}
+
+  /* SIDEBAR */
+  .d-sidebar{width:220px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:28px 0 20px;height:100vh;overflow-y:auto;}
+  .d-sidebar::-webkit-scrollbar{display:none;}
+  .d-brand{padding:0 22px 28px;}
+  .d-brand-logo{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;letter-spacing:-.5px;background:linear-gradient(135deg,var(--gold2),var(--gold) 60%,#a07830);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+  .d-brand-tag{font-size:.55rem;color:var(--text3);letter-spacing:2.5px;text-transform:uppercase;margin-top:4px;}
+  .d-brand-pro{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,rgba(201,168,76,.18),rgba(232,204,122,.08));border:1px solid rgba(201,168,76,.35);border-radius:99px;padding:2px 8px 2px 6px;font-size:.52rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold2);margin-top:6px;}
+  .d-brand-pro::before{content:'✦';font-size:.48rem;}
+  .d-nav{display:flex;flex-direction:column;gap:2px;padding:0 10px;flex:1;}
+  .d-nav-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;cursor:pointer;transition:all .18s;color:var(--text3);font-size:.82rem;font-weight:500;border:1px solid transparent;}
+  .d-nav-item:hover{background:var(--surface);color:var(--text2);}
+  .d-nav-item.active{background:var(--goldglow);border-color:rgba(201,168,76,.25);color:var(--gold2);}
+  .d-nav-icon{font-size:1rem;width:20px;text-align:center;flex-shrink:0;}
+  .d-nav-divider{height:1px;background:var(--border);margin:10px 12px;}
+  .d-sidebar-footer{padding:16px 22px 0;font-size:.55rem;color:var(--text3);letter-spacing:1px;line-height:1.7;}
+  .d-sidebar-date{font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:600;color:var(--text2);line-height:1;margin-bottom:2px;}
+  .d-sidebar-day{font-size:.56rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase;}
+
+  /* MAIN CONTENT */
+  .d-main{flex:1;overflow-y:auto;padding:36px 40px 60px;position:relative;}
+  .d-main::-webkit-scrollbar{width:4px;}
+  .d-main::-webkit-scrollbar-track{background:transparent;}
+  .d-main::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px;}
+
+  /* SECTIONS */
+  .d-section{display:none;animation:fadeUp .3s ease both;}
+  .d-section.active{display:block;}
+
+  /* SECTION HEADER */
+  .d-sec-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid var(--border);}
+  .d-sec-title{font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;}
+  .d-sec-sub{font-size:.68rem;color:var(--text3);margin-top:4px;letter-spacing:.5px;}
+
+  /* OVERVIEW GRID */
+  .d-overview{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:32px;}
+  .d-overview .ov-tile{padding:20px 16px;border-radius:16px;}
+  .d-overview .ov-val{font-size:1.25rem;}
+  .d-overview .ov-label{font-size:.54rem;}
+
+  /* POT GRID on dashboard */
+  .d-pot-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:0;}
+
+  /* RECENT TX on dashboard */
+  .d-recent-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;margin-top:28px;}
+  .d-recent-title{font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;}
+  .d-view-all{font-size:.65rem;color:var(--gold);cursor:pointer;background:none;border:none;font-family:'Outfit',sans-serif;}
+  .d-view-all:hover{text-decoration:underline;}
+
+  /* SIDEBAR FOOTER */
+  .d-footer{font-size:.55rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:28px;}
+  .d-footer span{color:var(--gold);}
+}
+@media(max-width:767px){
+  .d-shell{display:none;}
+}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.45;}}
+@keyframes toastIn{from{opacity:0;transform:translateY(-18px) translateX(-50%);}to{opacity:1;transform:translateY(0) translateX(-50%);}}
+@keyframes toastOut{from{opacity:1;transform:translateY(0) translateX(-50%);}to{opacity:0;transform:translateY(-10px) translateX(-50%);}}
+@keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}}
+.fu{animation:fadeUp .45s ease both;}
+.d1{animation-delay:.05s}.d2{animation-delay:.1s}.d3{animation-delay:.15s}.d4{animation-delay:.2s}.d5{animation-delay:.25s}
+
+/* ── FIREBASE AUTH UI ── */
+.fb-login-overlay{position:fixed;inset:0;background:rgba(8,8,8,.97);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+.fb-login-overlay.hidden{display:none;}
+.fb-login-card{background:var(--surface);border:1px solid rgba(201,168,76,.25);border-radius:24px;padding:40px 32px;max-width:360px;width:90%;text-align:center;}
+.fb-login-logo{font-family:'Playfair Display',serif;font-size:2.2rem;font-weight:700;background:linear-gradient(135deg,var(--gold2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px;}
+.fb-login-tag{font-size:.6rem;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-bottom:28px;}
+.fb-login-desc{font-size:.82rem;color:var(--text2);line-height:1.7;margin-bottom:28px;}
+.fb-google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1a1a1a;border:none;border-radius:12px;padding:13px 20px;font-family:'Outfit',sans-serif;font-weight:600;font-size:.88rem;cursor:pointer;transition:opacity .2s;}
+.fb-google-btn:hover{opacity:.9;}
+.fb-google-btn svg{width:20px;height:20px;flex-shrink:0;}
+.fb-auth-bar{display:flex;align-items:center;gap:10px;padding:0;}
+.fb-user-info{display:none;align-items:center;gap:8px;}
+.fb-avatar{width:28px;height:28px;border-radius:50%;border:1px solid rgba(201,168,76,.3);}
+.fb-uname{font-size:.72rem;color:var(--text2);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fb-logout-btn{background:none;border:1px solid var(--border2);color:var(--text3);border-radius:8px;padding:4px 10px;font-size:.62rem;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s;}
+.fb-logout-btn:hover{border-color:var(--red);color:var(--red);}
+.fb-login-btn{display:flex;align-items:center;gap:6px;background:var(--goldglow);border:1px solid rgba(201,168,76,.3);color:var(--gold2);border-radius:10px;padding:6px 12px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s;}
+.fb-login-btn:hover{background:rgba(201,168,76,.2);}
+.fb-saving{position:fixed;bottom:20px;right:20px;background:rgba(76,175,130,.12);border:1px solid rgba(76,175,130,.3);color:var(--green);border-radius:99px;padding:7px 14px;font-size:.68rem;font-weight:500;display:none;z-index:500;align-items:center;gap:6px;}
+.fb-saving.show{display:flex;}
+/* TOAST */
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999;padding:11px 20px;border-radius:99px;font-size:.76rem;font-weight:600;pointer-events:none;white-space:nowrap;display:none;align-items:center;gap:8px;box-shadow:0 8px 32px rgba(0,0,0,.6);}
+.toast.warn{background:rgba(224,154,58,.15);border:1px solid rgba(224,154,58,.45);color:var(--amber);}
+.toast.danger{background:rgba(224,94,94,.15);border:1px solid rgba(224,94,94,.45);color:var(--red);}
+.toast.ok{background:rgba(76,175,130,.15);border:1px solid rgba(76,175,130,.45);color:var(--green);}
+.toast.show{display:flex;animation:toastIn .3s ease forwards;}
+.toast.hide{display:flex;animation:toastOut .3s ease forwards;}
+
+/* HEADER */
+.header{padding:40px 0 28px;display:flex;justify-content:space-between;align-items:flex-start;}
+.logo{font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:700;letter-spacing:-.5px;background:linear-gradient(135deg,var(--gold2),var(--gold) 60%,#a07830);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1;}
+.tagline{font-size:.61rem;color:var(--text3);letter-spacing:2.5px;text-transform:uppercase;margin-top:5px;}
+.hright{text-align:right;}
+.hday{font-size:.61rem;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;}
+.hnum{font-family:'Playfair Display',serif;font-size:1.9rem;font-weight:600;color:var(--text2);line-height:1;margin-top:2px;}
+.divider{height:1px;background:linear-gradient(90deg,transparent,var(--border2) 30%,var(--border2) 70%,transparent);margin-bottom:26px;}
+
+/* OVERVIEW STRIP */
+.overview{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:24px;}
+.ov-tile{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px 12px;text-align:center;}
+.ov-label{font-size:.56rem;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;}
+.ov-val{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:600;color:var(--text);}
+.ov-tile.highlight{border-color:rgba(201,168,76,.25);background:linear-gradient(135deg,var(--surface),#1a1a0e);}
+.ov-tile.highlight .ov-val{color:var(--gold2);}
+
+/* SECTION TITLE */
+.sec{font-size:.58rem;letter-spacing:3px;text-transform:uppercase;color:var(--text3);margin-bottom:12px;display:flex;align-items:center;gap:10px;}
+.sec::after{content:'';flex:1;height:1px;background:var(--border);}
+.sec-action{font-size:.62rem;color:var(--gold);background:none;border:1px solid rgba(201,168,76,.3);border-radius:99px;padding:4px 12px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:500;transition:background .2s;white-space:nowrap;}
+.sec-action:hover{background:var(--goldglow);}
+
+/* POT CARDS */
+.pots-list{display:flex;flex-direction:column;gap:10px;margin-bottom:26px;}
+.pot-card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:18px 18px 14px;position:relative;overflow:hidden;transition:border-color .2s;}
+.pot-card:hover{border-color:var(--border2);}
+.pot-top-line{position:absolute;top:0;left:0;right:0;height:2px;border-radius:18px 18px 0 0;}
+.pot-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;}
+.pot-name-wrap{}
+.pot-emoji{font-size:1.3rem;line-height:1;margin-bottom:4px;}
+.pot-name{font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;color:var(--text);}
+.pot-source{font-size:.62rem;color:var(--text3);margin-top:2px;letter-spacing:.5px;}
+.pot-actions{display:flex;gap:6px;}
+.pot-btn{background:var(--surface2);border:1px solid var(--border2);color:var(--text3);border-radius:8px;padding:5px 10px;font-size:.65rem;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s;}
+.pot-btn:hover{border-color:var(--gold);color:var(--gold);}
+.pot-btn.del:hover{border-color:var(--red);color:var(--red);}
+.pot-amounts{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;}
+.pot-remain{font-family:'Playfair Display',serif;font-size:1.9rem;font-weight:700;line-height:1;transition:color .3s;}
+.pot-remain.ok{color:var(--green);}
+.pot-remain.warn{color:var(--amber);}
+.pot-remain.danger{color:var(--red);}
+.pot-remain.zero{color:var(--text3);}
+.pot-of{font-size:.7rem;color:var(--text3);}
+.pot-of span{color:var(--text2);}
+.pot-bar-track{height:4px;background:var(--surface2);border-radius:99px;overflow:hidden;margin-bottom:10px;}
+.pot-bar-fill{height:100%;border-radius:99px;transition:width .6s cubic-bezier(.4,0,.2,1),background .3s;}
+.pot-footer{display:flex;justify-content:space-between;align-items:center;}
+.pot-pct-pill{font-size:.6rem;padding:3px 9px;border-radius:99px;font-weight:600;letter-spacing:.5px;}
+.pot-pct-pill.ok{background:rgba(76,175,130,.1);color:var(--green);border:1px solid rgba(76,175,130,.2);}
+.pot-pct-pill.warn{background:rgba(224,154,58,.1);color:var(--amber);border:1px solid rgba(224,154,58,.2);}
+.pot-pct-pill.danger{background:rgba(224,94,94,.1);color:var(--red);border:1px solid rgba(224,94,94,.2);}
+.pot-spent-label{font-size:.62rem;color:var(--text3);}
+.pot-spent-label span{color:var(--text2);}
+.empty-pots{text-align:center;padding:32px 20px;background:var(--surface);border:1px dashed var(--border2);border-radius:18px;margin-bottom:26px;}
+.empty-pots-icon{font-size:1.8rem;margin-bottom:10px;opacity:.3;}
+.empty-pots-text{font-size:.8rem;color:var(--text3);line-height:1.7;}
+
+/* ADD POT MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(8px);z-index:300;align-items:flex-end;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-sheet{background:var(--surface);border:1px solid var(--border2);border-radius:22px 22px 0 0;padding:26px 22px 48px;width:100%;max-width:430px;animation:fadeUp .28s ease;position:relative;overflow:hidden;}
+.modal-sheet::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold) 50%,transparent);opacity:.5;}
+.modal-drag{width:36px;height:3px;background:var(--border2);border-radius:99px;margin:0 auto 20px;}
+.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;}
+.modal-title{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:600;}
+.modal-close{background:var(--surface2);border:1px solid var(--border);color:var(--text2);border-radius:50%;width:30px;height:30px;cursor:pointer;font-size:.75rem;display:flex;align-items:center;justify-content:center;}
+.modal-close:hover{background:var(--bg2);}
+
+/* EMOJI PICKER */
+.emoji-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.ep{width:38px;height:38px;border-radius:10px;background:var(--surface2);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:1.1rem;cursor:pointer;transition:all .15s;}
+.ep:hover{border-color:var(--gold);}
+.ep.sel{border-color:var(--gold);background:var(--goldglow);}
+
+/* COLOUR PICKER */
+.colour-row{display:flex;gap:8px;margin-bottom:16px;}
+.cp{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .15s,border-color .15s;}
+.cp:hover{transform:scale(1.15);}
+.cp.sel{border-color:white;transform:scale(1.1);}
+
+/* FIELD */
+.field{margin-bottom:13px;}
+.field label{display:block;font-size:.58rem;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:6px;font-weight:500;}
+.field input,.field select,.field textarea{width:100%;background:var(--bg2);border:1px solid var(--border2);border-radius:11px;color:var(--text);font-family:'Outfit',sans-serif;font-size:.9rem;padding:11px 13px;outline:none;transition:border-color .2s,box-shadow .2s;appearance:none;-webkit-appearance:none;resize:none;}
+.field input:focus,.field select:focus{border-color:rgba(201,168,76,.5);box-shadow:0 0 0 3px var(--goldglow);}
+.field input::placeholder{color:var(--text3);}
+.field select option{background:#1a1a1a;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.modal-btn{width:100%;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#0f0c00;border:none;border-radius:12px;padding:14px;font-family:'Outfit',sans-serif;font-weight:700;font-size:.88rem;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;transition:opacity .2s,box-shadow .2s;box-shadow:0 4px 18px rgba(201,168,76,.2);}
+.modal-btn:hover{opacity:.9;box-shadow:0 6px 26px rgba(201,168,76,.35);}
+.modal-btn.secondary{background:var(--surface2);color:var(--text2);box-shadow:none;border:1px solid var(--border2);margin-top:8px;}
+.modal-btn.secondary:hover{background:var(--bg2);opacity:1;}
+
+/* ADD SPENDING FORM */
+.add-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:22px 18px;margin-bottom:16px;position:relative;overflow:hidden;}
+.add-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border2) 50%,transparent);}
+.add-title{font-family:'Playfair Display',serif;font-size:1.05rem;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+.add-title .dot{width:5px;height:5px;background:var(--gold);border-radius:50%;}
+.submit-btn{width:100%;background:linear-gradient(135deg,var(--gold2),var(--gold));color:#0f0c00;border:none;border-radius:12px;padding:14px;font-family:'Outfit',sans-serif;font-weight:700;font-size:.88rem;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;transition:opacity .2s,transform .15s,box-shadow .2s;margin-top:2px;box-shadow:0 4px 18px rgba(201,168,76,.18);}
+.submit-btn:hover{opacity:.9;box-shadow:0 6px 26px rgba(201,168,76,.33);}
+.submit-btn:active{transform:scale(.98);}
+.no-pots-warn{font-size:.75rem;color:var(--amber);text-align:center;padding:12px;background:rgba(224,154,58,.07);border:1px solid rgba(224,154,58,.2);border-radius:10px;margin-bottom:12px;}
+
+/* METHOD PILLS */
+.method-pills{display:flex;gap:8px;}
+.mpill{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:9px 6px;text-align:center;cursor:pointer;transition:all .18s;font-size:.72rem;color:var(--text3);}
+.mpill:hover{border-color:var(--border2);color:var(--text2);}
+.mpill.sel-cash{background:rgba(76,175,130,.12);border-color:rgba(76,175,130,.4);color:var(--cash-c);}
+.mpill.sel-qr{background:rgba(91,156,246,.12);border-color:rgba(91,156,246,.4);color:var(--qr-c);}
+.mpill.sel-credit{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.4);color:var(--card-c);}
+
+/* FILTER */
+.filter-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px;}
+.chip{background:var(--surface);border:1px solid var(--border);color:var(--text3);border-radius:99px;padding:6px 14px;font-family:'Outfit',sans-serif;font-size:.68rem;font-weight:500;cursor:pointer;transition:all .18s;}
+.chip:hover{border-color:var(--border2);color:var(--text2);}
+.chip.active{background:var(--goldglow);border-color:rgba(201,168,76,.4);color:var(--gold2);}
+.custom-range{display:none;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap;}
+.custom-range.show{display:flex;}
+.custom-range input[type="date"]{background:var(--surface);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:.75rem;padding:8px 11px;outline:none;flex:1;min-width:110px;}
+.custom-range input:focus{border-color:var(--gold);}
+.custom-range button{background:var(--gold);color:#1a1200;border:none;border-radius:10px;padding:8px 14px;font-family:'Outfit',sans-serif;font-weight:600;font-size:.7rem;cursor:pointer;}
+
+/* UTILS */
+.util-strip{display:flex;gap:8px;margin-bottom:26px;}
+.util-btn{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text2);border-radius:11px;padding:10px 6px;font-family:'Outfit',sans-serif;font-size:.68rem;font-weight:500;cursor:pointer;transition:background .18s;text-align:center;}
+.util-btn:hover{background:var(--surface2);border-color:var(--border2);}
+.util-btn.del{color:#c06060;}
+.util-btn.del:hover{background:rgba(224,94,94,.08);border-color:rgba(224,94,94,.3);}
+
+/* HISTORY */
+.hist-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px;}
+.hist-title{font-family:'Playfair Display',serif;font-size:1rem;font-weight:600;}
+.hist-count{font-size:.62rem;color:var(--text3);letter-spacing:1px;}
+.tx-list{display:flex;flex-direction:column;gap:8px;}
+.tx-card{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:13px 15px;display:flex;align-items:center;gap:12px;animation:fadeUp .28s ease both;transition:border-color .18s;}
+.tx-card:hover{border-color:var(--border2);}
+.tx-color{width:3px;align-self:stretch;border-radius:99px;flex-shrink:0;}
+.tx-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0;background:var(--surface2);}
+.tx-body{flex:1;min-width:0;}
+.tx-desc{font-size:.86rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tx-meta{font-size:.6rem;color:var(--text3);margin-top:3px;display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+.tx-tag{background:var(--surface2);border-radius:4px;padding:1px 6px;}
+.tx-pot-tag{border-radius:4px;padding:1px 6px;font-weight:500;}
+.tx-right{text-align:right;flex-shrink:0;}
+.tx-amount{font-family:'Playfair Display',serif;font-size:.93rem;font-weight:600;color:#e07070;}
+.tx-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:.68rem;display:block;margin-top:3px;margin-left:auto;padding:2px 4px;border-radius:4px;transition:color .18s;}
+.tx-del:hover{color:var(--red);}
+.empty-state{text-align:center;padding:44px 20px;}
+.empty-icon{font-size:1.8rem;opacity:.2;margin-bottom:10px;}
+.empty-text{font-size:.78rem;color:var(--text3);line-height:1.7;}
+.footer{text-align:center;padding:22px 0 8px;font-size:.6rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase;}
+.footer span{color:var(--gold);}
+
+/* PRO BADGE */
+.pro-badge{display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,rgba(201,168,76,.18),rgba(232,204,122,.08));border:1px solid rgba(201,168,76,.35);border-radius:99px;padding:3px 10px 3px 7px;font-size:.58rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold2);}
+.pro-badge::before{content:'✦';font-size:.55rem;}
+
+/* AI ADVISOR PANEL */
+.ai-panel{background:linear-gradient(135deg,#0e0e12,#121008);border:1px solid rgba(201,168,76,.2);border-radius:20px;padding:20px 18px;margin-bottom:22px;position:relative;overflow:hidden;}
+.ai-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold) 40%,var(--gold2) 60%,transparent);opacity:.6;}
+.ai-panel-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.ai-panel-title{font-family:'Playfair Display',serif;font-size:.95rem;font-weight:600;display:flex;align-items:center;gap:8px;}
+.ai-orb{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--gold2),var(--gold));display:flex;align-items:center;justify-content:center;font-size:.65rem;flex-shrink:0;animation:orbPulse 3s ease-in-out infinite;}
+@keyframes orbPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,.4);}50%{box-shadow:0 0 0 6px rgba(201,168,76,0);}}
+.ai-refresh-btn{background:none;border:1px solid rgba(201,168,76,.25);color:var(--gold);border-radius:8px;padding:5px 10px;font-size:.62rem;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .2s;}
+.ai-refresh-btn:hover{background:var(--goldglow);}
+.ai-refresh-btn:disabled{opacity:.4;cursor:default;}
+.ai-body{font-size:.8rem;color:var(--text2);line-height:1.75;}
+.ai-body p{margin-bottom:8px;}
+.ai-body p:last-child{margin-bottom:0;}
+.ai-body strong{color:var(--text);}
+.ai-body .ai-highlight{color:var(--gold2);}
+.ai-loading{display:flex;align-items:center;gap:10px;color:var(--text3);font-size:.78rem;}
+.ai-dots{display:flex;gap:4px;}
+.ai-dot{width:5px;height:5px;border-radius:50%;background:var(--gold);opacity:.3;animation:dotBounce 1.2s ease-in-out infinite;}
+.ai-dot:nth-child(2){animation-delay:.2s;}
+.ai-dot:nth-child(3){animation-delay:.4s;}
+@keyframes dotBounce{0%,100%{opacity:.3;transform:translateY(0);}50%{opacity:1;transform:translateY(-4px);}}
+.ai-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+.ai-chip{background:var(--surface2);border:1px solid var(--border2);color:var(--text3);border-radius:8px;padding:5px 10px;font-size:.62rem;cursor:pointer;font-family:'Outfit',sans-serif;transition:all .18s;white-space:nowrap;}
+.ai-chip:hover{border-color:rgba(201,168,76,.4);color:var(--gold);}
+
+/* AI SMART FILL */
+.smart-suggestion{display:none;background:linear-gradient(90deg,rgba(201,168,76,.06),transparent);border:1px solid rgba(201,168,76,.2);border-radius:10px;padding:9px 12px;margin-top:-8px;margin-bottom:8px;font-size:.72rem;color:var(--text3);cursor:pointer;transition:background .18s;align-items:center;gap:8px;}
+.smart-suggestion.show{display:flex;}
+.smart-suggestion:hover{background:rgba(201,168,76,.1);}
+.smart-suggestion strong{color:var(--gold);}
+.smart-suggestion .ss-icon{font-size:.9rem;}
+
+/* AI FORECAST BADGE on pot */
+.pot-forecast{font-size:.58rem;padding:2px 8px;border-radius:6px;background:rgba(91,156,246,.1);color:var(--blue);border:1px solid rgba(91,156,246,.2);display:inline-flex;align-items:center;gap:3px;margin-top:5px;}
+.pot-forecast.over{background:rgba(224,94,94,.1);color:var(--red);border-color:rgba(224,94,94,.2);}
+.pot-forecast.tight{background:rgba(224,154,58,.1);color:var(--amber);border-color:rgba(224,154,58,.2);}
+
+/* AI CHAT MODAL */
+.ai-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(10px);z-index:400;align-items:flex-end;justify-content:center;}
+.ai-modal-overlay.open{display:flex;}
+.ai-modal-sheet{background:#0e0e0e;border:1px solid rgba(201,168,76,.2);border-radius:22px 22px 0 0;padding:24px 20px 36px;width:100%;max-width:430px;animation:fadeUp .28s ease;position:relative;overflow:hidden;max-height:80vh;display:flex;flex-direction:column;}
+.ai-modal-sheet::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold) 50%,transparent);opacity:.7;}
+.ai-chat-messages{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px;min-height:160px;max-height:320px;}
+.ai-chat-messages::-webkit-scrollbar{width:3px;}
+.ai-chat-messages::-webkit-scrollbar-track{background:transparent;}
+.ai-chat-messages::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px;}
+.chat-msg{max-width:90%;font-size:.8rem;line-height:1.65;padding:10px 14px;border-radius:14px;}
+.chat-msg.user{background:var(--surface2);border:1px solid var(--border2);align-self:flex-end;color:var(--text);border-radius:14px 14px 4px 14px;}
+.chat-msg.ai{background:linear-gradient(135deg,rgba(201,168,76,.08),rgba(201,168,76,.03));border:1px solid rgba(201,168,76,.15);color:var(--text2);align-self:flex-start;border-radius:14px 14px 14px 4px;}
+.ai-chat-input-row{display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
+.ai-chat-input{flex:1;background:var(--bg2);border:1px solid var(--border2);border-radius:11px;color:var(--text);font-family:'Outfit',sans-serif;font-size:.84rem;padding:10px 13px;outline:none;transition:border-color .2s;}
+.ai-chat-input:focus{border-color:rgba(201,168,76,.5);}
+.ai-chat-send{background:linear-gradient(135deg,var(--gold2),var(--gold));color:#0f0c00;border:none;border-radius:11px;padding:10px 16px;font-weight:700;cursor:pointer;font-size:.82rem;transition:opacity .2s;}
+.ai-chat-send:hover{opacity:.88;}
+.ai-chat-send:disabled{opacity:.4;cursor:default;}
+</style>
+</head>
+<body>
+<div class="toast" id="toast"></div>
+
+<!-- Firebase Login Overlay -->
+<div class="fb-login-overlay" id="fb-login-overlay">
+  <div class="fb-login-card">
+    <div class="fb-login-logo">Finlo Pro</div>
+    <div class="fb-login-tag">Money Pots · Cloud Sync</div>
+    <div class="fb-login-desc">Log masuk dengan Google untuk simpan data anda secara selamat di cloud. Data anda akan sync merentas semua peranti.</div>
+    <button class="fb-google-btn" onclick="fbLogin()">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+      Teruskan dengan Google
+    </button>
+  </div>
+</div>
+
+<!-- Saving indicator -->
+<div class="fb-saving" id="fb-saving">⟳ Menyimpan...</div>
+
+<div class="wrap">
+  <!-- HEADER -->
+  <div class="header fu">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="logo">Finlo</div>
+        <div class="pro-badge">Pro</div>
+      </div>
+      <div class="tagline">Money Pots</div>
+    </div>
+    <div class="hright">
+      <div class="hday" id="hday"></div>
+      <div class="hnum" id="hnum"></div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:6px;justify-content:flex-end">
+        <div class="fb-user-info" id="fb-user-info">
+          <img class="fb-avatar" id="fb-user-avatar" src="" alt="">
+          <span class="fb-uname" id="fb-user-name"></span>
+          <button class="fb-logout-btn" onclick="fbLogout()">Keluar</button>
+        </div>
+        <button class="fb-login-btn" id="fb-login-btn" onclick="fbLogin()" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Log Masuk
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="divider"></div>
+
+  <!-- OVERVIEW -->
+  <div class="overview fu d1">
+    <div class="ov-tile highlight">
+      <div class="ov-label">Total Funds</div>
+      <div class="ov-val" id="ovTotal">RM 0</div>
+    </div>
+    <div class="ov-tile">
+      <div class="ov-label">Total Spent</div>
+      <div class="ov-val" id="ovSpent">RM 0</div>
+    </div>
+    <div class="ov-tile">
+      <div class="ov-label">Remaining</div>
+      <div class="ov-val" id="ovRemain">RM 0</div>
+    </div>
+  </div>
+
+  <!-- AI ADVISOR PANEL -->
+  <div class="ai-panel fu d2" id="aiAdvisorPanel">
+    <div class="ai-panel-head">
+      <div class="ai-panel-title">
+        <div class="ai-orb">✦</div>
+        AI Financial Advisor
+      </div>
+      <button class="ai-refresh-btn" id="aiRefreshBtn" onclick="runAIAdvisor()">Analyse →</button>
+    </div>
+    <div class="ai-body" id="aiAdvisorBody">
+      <div style="color:var(--text3);font-size:.78rem;line-height:1.7;">Tap <strong style="color:var(--gold)">Analyse →</strong> to get personalised insights on your spending patterns, pot health, and budget recommendations.</div>
+    </div>
+    <div class="ai-chips" id="aiChips">
+      <div class="ai-chip" onclick="openAIChat('Am I overspending anywhere?')">Am I overspending?</div>
+      <div class="ai-chip" onclick="openAIChat('Which pot needs attention this month?')">Pot health check</div>
+      <div class="ai-chip" onclick="openAIChat('Give me 3 tips to save more money based on my habits.')">Save more tips</div>
+      <div class="ai-chip" onclick="openAIChat('Forecast: will I run out of budget this month?')">Budget forecast</div>
+    </div>
+  </div>
+
+  <!-- POTS -->
+  <div class="fu d2" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <div class="sec" style="margin-bottom:0;flex:1">My Money Pots</div>
+    <button class="sec-action" onclick="openAddPot()" style="margin-left:12px">+ New Pot</button>
+  </div>
+  <div class="pots-list" id="potsList"></div>
+
+  <!-- ADD SPENDING -->
+  <div class="add-card fu d3">
+    <div class="add-title"><div class="dot"></div>Record Expense</div>
+    <div id="noPotWarn" class="no-pots-warn" style="display:none">⚠️ Create a money pot first before recording expenses.</div>
+    <div class="field"><label>Date & Time</label><input type="datetime-local" id="entryDate"></div>
+    <div class="field"><label>Description</label><input type="text" id="entryDesc" placeholder="What did you spend on?" oninput="onDescInput(this.value)"></div>
+    <div class="smart-suggestion" id="smartSuggestion" onclick="applySmartSuggestion()">
+      <span class="ss-icon">✦</span>
+      <span id="smartSuggestionText">...</span>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Category</label>
+        <select id="entryCat">
+          <option>Makanan/Minuman</option><option>Physical Shopping</option><option>Online Shopping</option>
+          <option>Minyak</option><option>Topup Phone</option><option>Capcut</option><option>Lain-lain</option>
+        </select>
+      </div>
+      <div class="field"><label>Money Pot</label><select id="entryPot"></select></div>
+    </div>
+    <div class="field">
+      <label>Payment Method</label>
+      <div class="method-pills">
+        <div class="mpill sel-cash" id="pill-cash" onclick="selectMethod('cash')">💵 Cash</div>
+        <div class="mpill" id="pill-qr" onclick="selectMethod('qr')">📱 QR Pay</div>
+        <div class="mpill" id="pill-credit" onclick="selectMethod('credit')">💳 Card</div>
+      </div>
+    </div>
+    <div class="field"><label>Amount (RM)</label><input type="number" id="entryAmt" placeholder="0.00" min="0" step="0.01"></div>
+    <button class="submit-btn" onclick="addEntry()">+ Record Spending</button>
+  </div>
+
+  <!-- FILTER -->
+  <div class="sec fu d4">Transaction History</div>
+  <div class="filter-row fu d4">
+    <button class="chip active" onclick="setFilter('all',this)">All Time</button>
+    <button class="chip" onclick="setFilter('today',this)">Today</button>
+    <button class="chip" onclick="setFilter('week',this)">This Week</button>
+    <button class="chip" onclick="setFilter('month',this)">This Month</button>
+    <button class="chip" onclick="setFilter('custom',this)">Custom</button>
+  </div>
+  <div class="custom-range" id="customRange">
+    <input type="date" id="dateFrom">
+    <span style="color:var(--text3);font-size:.75rem">—</span>
+    <input type="date" id="dateTo">
+    <button onclick="applyCustom()">Apply</button>
+  </div>
+
+  <!-- UTILS -->
+  <div class="util-strip fu d4">
+    <button class="util-btn" onclick="exportCSV()">↑ Export CSV</button>
+    <label class="util-btn" style="cursor:pointer">↓ Import CSV<input type="file" accept=".csv" id="importFile" style="display:none" onchange="importCSV(event)"></label>
+    <button class="util-btn del" onclick="clearAllTx()">✕ Clear Tx</button>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="fu d5">
+    <div class="hist-header">
+      <div class="hist-title">Transactions</div>
+      <div class="hist-count"><span id="histCount">0</span> entries</div>
+    </div>
+    <div class="tx-list" id="txList"></div>
+  </div>
+
+  <div class="footer">Crafted with care by <span>Khai</span> · Finlo <span>Pro</span> · Powered by Claude AI</div>
+</div>
+
+<!-- ══ DESKTOP SIDEBAR SHELL ══ -->
+<div class="d-shell">
+
+  <!-- SIDEBAR -->
+  <div class="d-sidebar">
+    <div class="d-brand">
+      <div class="d-brand-logo">Finlo</div>
+      <div class="d-brand-tag">Money Pots</div>
+      <div class="d-brand-pro">Pro</div>
+    </div>
+
+    <nav class="d-nav">
+      <div class="d-nav-item active" onclick="dNav('dashboard')" id="dnav-dashboard">
+        <span class="d-nav-icon">◈</span> Dashboard
+      </div>
+      <div class="d-nav-item" onclick="dNav('pots')" id="dnav-pots">
+        <span class="d-nav-icon">🪣</span> Money Pots
+      </div>
+      <div class="d-nav-item" onclick="dNav('add')" id="dnav-add">
+        <span class="d-nav-icon">＋</span> Record Expense
+      </div>
+      <div class="d-nav-item" onclick="dNav('history')" id="dnav-history">
+        <span class="d-nav-icon">📋</span> History
+      </div>
+      <div class="d-nav-divider"></div>
+      <div class="d-nav-item" onclick="dNav('ai')" id="dnav-ai">
+        <span class="d-nav-icon">✦</span> AI Advisor
+      </div>
+    </nav>
+
+    <div class="d-sidebar-footer">
+      <div class="d-sidebar-date" id="d-hnum"></div>
+      <div class="d-sidebar-day" id="d-hday"></div>
+      <div style="margin-top:10px;">Crafted by <span style="color:var(--gold)">Khai</span></div>
+    </div>
+  </div><!-- /sidebar -->
+
+  <!-- MAIN -->
+  <div class="d-main">
+
+    <!-- ① DASHBOARD -->
+    <div class="d-section active" id="dsec-dashboard">
+      <div class="d-sec-head">
+        <div>
+          <div class="d-sec-title">Dashboard</div>
+          <div class="d-sec-sub">Overview of your finances</div>
+        </div>
+        <button class="sec-action" onclick="openAddPot()">+ New Pot</button>
+      </div>
+
+      <div class="d-overview fu">
+        <div class="ov-tile highlight">
+          <div class="ov-label">Total Funds</div>
+          <div class="ov-val" id="d-ovTotal">RM 0</div>
+        </div>
+        <div class="ov-tile">
+          <div class="ov-label">Total Spent</div>
+          <div class="ov-val" id="d-ovSpent">RM 0</div>
+        </div>
+        <div class="ov-tile">
+          <div class="ov-label">Remaining</div>
+          <div class="ov-val" id="d-ovRemain">RM 0</div>
+        </div>
+        <div class="ov-tile">
+          <div class="ov-label">Transactions</div>
+          <div class="ov-val" id="d-ovTx">0</div>
+        </div>
+      </div>
+
+      <div class="sec">My Pots</div>
+      <div class="d-pot-grid" id="d-potsDash"></div>
+
+      <div class="d-recent-head">
+        <div class="d-recent-title">Recent Transactions</div>
+        <button class="d-view-all" onclick="dNav('history')">View all →</button>
+      </div>
+      <div class="tx-list" id="d-recentTx"></div>
+    </div>
+
+    <!-- ② POTS -->
+    <div class="d-section" id="dsec-pots">
+      <div class="d-sec-head">
+        <div>
+          <div class="d-sec-title">Money Pots</div>
+          <div class="d-sec-sub">Manage your budget pots</div>
+        </div>
+        <button class="sec-action" onclick="openAddPot()">+ New Pot</button>
+      </div>
+      <div class="pots-list" id="d-potsList"></div>
+    </div>
+
+    <!-- ③ ADD EXPENSE -->
+    <div class="d-section" id="dsec-add">
+      <div class="d-sec-head">
+        <div>
+          <div class="d-sec-title">Record Expense</div>
+          <div class="d-sec-sub">Log a new transaction</div>
+        </div>
+      </div>
+      <div style="max-width:520px;">
+        <div id="d-noPotWarn" class="no-pots-warn" style="display:none">⚠️ Create a money pot first before recording expenses.</div>
+        <div class="field"><label>Date & Time</label><input type="datetime-local" id="d-entryDate"></div>
+        <div class="field"><label>Description</label><input type="text" id="d-entryDesc" placeholder="What did you spend on?" oninput="onDescInputDesktop(this.value)"></div>
+        <div class="smart-suggestion" id="d-smartSuggestion" onclick="applySmartSuggestionDesktop()">
+          <span class="ss-icon">✦</span>
+          <span id="d-smartSuggestionText">...</span>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Category</label>
+            <select id="d-entryCat">
+              <option>Makanan/Minuman</option><option>Physical Shopping</option><option>Online Shopping</option>
+              <option>Minyak</option><option>Topup Phone</option><option>Capcut</option><option>Lain-lain</option>
+            </select>
+          </div>
+          <div class="field"><label>Money Pot</label><select id="d-entryPot"></select></div>
+        </div>
+        <div class="field">
+          <label>Payment Method</label>
+          <div class="method-pills">
+            <div class="mpill sel-cash" id="d-pill-cash" onclick="selectMethodDesktop('cash')">💵 Cash</div>
+            <div class="mpill" id="d-pill-qr" onclick="selectMethodDesktop('qr')">📱 QR Pay</div>
+            <div class="mpill" id="d-pill-credit" onclick="selectMethodDesktop('credit')">💳 Card</div>
+          </div>
+        </div>
+        <div class="field"><label>Amount (RM)</label><input type="number" id="d-entryAmt" placeholder="0.00" min="0" step="0.01"></div>
+        <button class="submit-btn" onclick="addEntryDesktop()">+ Record Spending</button>
+      </div>
+    </div>
+
+    <!-- ④ HISTORY -->
+    <div class="d-section" id="dsec-history">
+      <div class="d-sec-head">
+        <div>
+          <div class="d-sec-title">Transaction History</div>
+          <div class="d-sec-sub"><span id="d-histCount">0</span> entries</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="util-btn" style="padding:8px 14px;font-size:.68rem;" onclick="exportCSV()">↑ Export CSV</button>
+          <label class="util-btn" style="padding:8px 14px;font-size:.68rem;cursor:pointer">↓ Import<input type="file" accept=".csv" id="d-importFile" style="display:none" onchange="importCSV(event)"></label>
+          <button class="util-btn del" style="padding:8px 14px;font-size:.68rem;" onclick="clearAllTx()">✕ Clear</button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <button class="chip active" onclick="setFilter('all',this)">All Time</button>
+        <button class="chip" onclick="setFilter('today',this)">Today</button>
+        <button class="chip" onclick="setFilter('week',this)">This Week</button>
+        <button class="chip" onclick="setFilter('month',this)">This Month</button>
+        <button class="chip" onclick="setFilter('custom',this)">Custom</button>
+      </div>
+      <div class="custom-range" id="d-customRange">
+        <input type="date" id="d-dateFrom">
+        <span style="color:var(--text3);font-size:.75rem">—</span>
+        <input type="date" id="d-dateTo">
+        <button onclick="applyCustomDesktop()">Apply</button>
+      </div>
+      <div class="tx-list" id="d-txList"></div>
+    </div>
+
+    <!-- ⑤ AI ADVISOR -->
+    <div class="d-section" id="dsec-ai">
+      <div class="d-sec-head">
+        <div>
+          <div class="d-sec-title">AI Advisor</div>
+          <div class="d-sec-sub">Smart financial insights powered by your data</div>
+        </div>
+      </div>
+      <div class="ai-panel" id="d-aiAdvisorPanel" style="margin-bottom:20px;">
+        <div class="ai-panel-head">
+          <div class="ai-panel-title">
+            <div class="ai-orb">✦</div>
+            Financial Analysis
+          </div>
+          <button class="ai-refresh-btn" id="d-aiRefreshBtn" onclick="runAIAdvisor()">Analyse →</button>
+        </div>
+        <div class="ai-body" id="d-aiAdvisorBody">
+          <div style="color:var(--text3);font-size:.78rem;line-height:1.7;">Tap <strong style="color:var(--gold)">Analyse →</strong> to get personalised insights on your spending patterns, pot health, and budget recommendations.</div>
+        </div>
+        <div class="ai-chips">
+          <div class="ai-chip" onclick="openAIChat('Am I overspending anywhere?')">Am I overspending?</div>
+          <div class="ai-chip" onclick="openAIChat('Which pot needs attention this month?')">Pot health check</div>
+          <div class="ai-chip" onclick="openAIChat('Give me 3 tips to save more money based on my habits.')">Save more tips</div>
+          <div class="ai-chip" onclick="openAIChat('Forecast: will I run out of budget this month?')">Budget forecast</div>
+        </div>
+      </div>
+      <!-- inline chat on desktop AI page -->
+      <div class="add-card" style="padding:18px;">
+        <div class="add-title" style="margin-bottom:12px;"><div class="dot"></div>Chat with Finlo AI</div>
+        <div class="ai-chat-messages" id="d-aiChatMessages" style="min-height:200px;max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px;"></div>
+        <div class="ai-chat-input-row">
+          <input class="ai-chat-input" id="d-aiChatInput" placeholder="Ask anything about your budget..." onkeydown="if(event.key==='Enter')sendAIChatDesktop()">
+          <button class="ai-chat-send" id="d-aiChatSend" onclick="sendAIChatDesktop()">Send</button>
+        </div>
+      </div>
+      <div class="d-footer">Finlo <span>Pro</span> · Powered by Claude AI</div>
+    </div>
+
+  </div><!-- /d-main -->
+</div><!-- /d-shell -->
+
+<!-- AI CHAT MODAL -->
+<div class="ai-modal-overlay" id="aiChatModal" onclick="aiChatOverlayClick(event)">
+  <div class="ai-modal-sheet">
+    <div class="modal-drag"></div>
+    <div class="modal-head" style="margin-bottom:14px;">
+      <div class="modal-title" style="display:flex;align-items:center;gap:8px;"><div class="ai-orb" style="width:18px;height:18px;font-size:.55rem;">✦</div> Ask Finlo AI</div>
+      <button class="modal-close" onclick="closeAIChat()">✕</button>
+    </div>
+    <div class="ai-chat-messages" id="aiChatMessages"></div>
+    <div class="ai-chat-input-row">
+      <input class="ai-chat-input" id="aiChatInput" placeholder="Ask anything about your budget..." onkeydown="if(event.key==='Enter')sendAIChat()">
+      <button class="ai-chat-send" id="aiChatSend" onclick="sendAIChat()">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD/EDIT POT MODAL -->
+<div class="modal-overlay" id="potModal" onclick="potOverlayClick(event)">
+  <div class="modal-sheet">
+    <div class="modal-drag"></div>
+    <div class="modal-head">
+      <div class="modal-title" id="potModalTitle">New Money Pot</div>
+      <button class="modal-close" onclick="closePotModal()">✕</button>
+    </div>
+
+    <div class="field">
+      <label>Pot Name</label>
+      <input type="text" id="potName" placeholder="e.g. Dividen Maybank, Bonus Q1...">
+    </div>
+
+    <div class="field">
+      <label>Pick an Emoji</label>
+      <div class="emoji-row" id="emojiRow"></div>
+    </div>
+
+    <div class="field">
+      <label>Colour Tag</label>
+      <div class="colour-row" id="colourRow"></div>
+    </div>
+
+    <div class="field">
+      <label>Amount (RM)</label>
+      <input type="number" id="potAmount" placeholder="0.00" min="0" step="0.01">
+    </div>
+
+    <div class="field">
+      <label>Notes <span style="color:var(--text3);font-weight:300">(optional)</span></label>
+      <input type="text" id="potNote" placeholder="e.g. Dividen Q3 2025, Bonus tahunan...">
+    </div>
+
+    <button class="modal-btn" id="potSaveBtn" onclick="savePot()">Create Pot</button>
+    <button class="modal-btn secondary" onclick="closePotModal()">Cancel</button>
+  </div>
+</div>
+
+<script>
+// ── DATA ────────────────────────────────────────────────
+let pots    = [];
+let entries = [];
+let filt='all', cfrom=null, cto=null;
+let selMethod='cash';
+let editPotId=null;
+let _saveDebounce=null;
+
+// ── FIREBASE HELPERS ─────────────────────────────────────
+async function loadFromFirestore(){
+  const user=window._fbUser; if(!user)return;
+  try{
+    const {db,doc,getDoc}=window._fb;
+    const snap=await getDoc(doc(db,'users',user.uid,'data','main'));
+    if(snap.exists()){
+      const d=snap.data();
+      pots=d.pots||[];
+      entries=d.entries||[];
+    } else {
+      pots=[]; entries=[];
+    }
+    render();
+    showToast('✓ Data dimuatkan dari cloud','ok');
+  } catch(e){
+    console.error('Load error',e);
+    showToast('⚠️ Gagal muatkan data','warn');
+  }
+}
+window.loadFromFirestore=loadFromFirestore;
+
+async function saveToFirestore(){
+  const user=window._fbUser; if(!user)return;
+  const saving=document.getElementById('fb-saving');
+  if(saving)saving.classList.add('show');
+  try{
+    const {db,doc,setDoc}=window._fb;
+    await setDoc(doc(db,'users',user.uid,'data','main'),{pots,entries,updatedAt:new Date().toISOString()});
+  } catch(e){
+    console.error('Save error',e);
+    showToast('⚠️ Gagal simpan ke cloud','warn');
+  } finally {
+    if(saving)saving.classList.remove('show');
+  }
+}
+
+function debounceSave(){
+  clearTimeout(_saveDebounce);
+  _saveDebounce=setTimeout(()=>saveToFirestore(),1200);
+}
+
+// Login / Logout
+window.fbLogin=async function(){
+  try{
+    const {auth,provider,signInWithPopup}=window._fb;
+    await signInWithPopup(auth,provider);
+  } catch(e){
+    if(e.code!=='auth/popup-closed-by-user') showToast('⚠️ Log masuk gagal: '+e.message,'warn');
+  }
+};
+window.fbLogout=async function(){
+  if(!confirm('Log keluar? Data tetap selamat di cloud.'))return;
+  const {auth,signOut}=window._fb;
+  await signOut(auth);
+  pots=[]; entries=[];
+  render();
+};
+
+const EMOJIS=['💰','🏦','📈','🎯','💎','🪙','💵','🏆','🎁','✈️','🏠','🚗','💊','📚','🌟','🔥'];
+const COLOURS=['#c9a84c','#4caf82','#5b9cf6','#e05e5e','#b57ef0','#e09a3a','#4cc9f0','#f072b6','#94cf4c','#cf4c7a'];
+const CAT_ICONS={'Makanan/Minuman':'🍜','Physical Shopping':'🛍️','Online Shopping':'📦','Minyak':'⛽','Topup Phone':'📲','Capcut':'✂️','Lain-lain':'📌'};
+const DAYS=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+let selEmoji='💰', selColour='#c9a84c';
+
+// ── INIT handled in desktop section below ────────────────
+
+// ── EMOJI & COLOUR PICKERS ───────────────────────────────
+function buildEmojiPicker(){
+  const r=document.getElementById('emojiRow');
+  r.innerHTML=EMOJIS.map(e=>`<div class="ep${e===selEmoji?' sel':''}" onclick="pickEmoji('${e}')">${e}</div>`).join('');
+}
+function pickEmoji(e){
+  selEmoji=e;
+  document.querySelectorAll('.ep').forEach(el=>el.classList.toggle('sel',el.textContent===e));
+}
+function buildColourPicker(){
+  const r=document.getElementById('colourRow');
+  r.innerHTML=COLOURS.map(c=>`<div class="cp${c===selColour?' sel':''}" style="background:${c}" onclick="pickColour('${c}')"></div>`).join('');
+}
+function pickColour(c){
+  selColour=c;
+  document.querySelectorAll('.cp').forEach(el=>el.classList.toggle('sel',el.style.background===c||el.style.backgroundColor===c));
+}
+
+// ── POT MODAL ────────────────────────────────────────────
+function openAddPot(){
+  editPotId=null;
+  selEmoji='💰'; selColour='#c9a84c';
+  document.getElementById('potModalTitle').textContent='New Money Pot';
+  document.getElementById('potSaveBtn').textContent='Create Pot';
+  document.getElementById('potName').value='';
+  document.getElementById('potAmount').value='';
+  document.getElementById('potNote').value='';
+  buildEmojiPicker(); buildColourPicker();
+  document.getElementById('potModal').classList.add('open');
+}
+function openEditPot(id){
+  const p=pots.find(x=>x.id===id); if(!p)return;
+  editPotId=id;
+  selEmoji=p.emoji||'💰'; selColour=p.colour||'#c9a84c';
+  document.getElementById('potModalTitle').textContent='Edit Pot';
+  document.getElementById('potSaveBtn').textContent='Save Changes';
+  document.getElementById('potName').value=p.name;
+  document.getElementById('potAmount').value=p.amount;
+  document.getElementById('potNote').value=p.note||'';
+  buildEmojiPicker(); buildColourPicker();
+  document.getElementById('potModal').classList.add('open');
+}
+function closePotModal(){ document.getElementById('potModal').classList.remove('open'); }
+function potOverlayClick(e){ if(e.target===document.getElementById('potModal')) closePotModal(); }
+
+function savePot(){
+  const name=document.getElementById('potName').value.trim();
+  const amount=parseFloat(document.getElementById('potAmount').value);
+  const note=document.getElementById('potNote').value.trim();
+  if(!name){ shakeEl('potName'); return; }
+  if(!amount||amount<=0){ shakeEl('potAmount'); return; }
+  if(editPotId){
+    const p=pots.find(x=>x.id===editPotId);
+    if(p){ p.name=name; p.amount=amount; p.note=note; p.emoji=selEmoji; p.colour=selColour; }
+  } else {
+    pots.push({ id:Date.now(), name, amount, note, emoji:selEmoji, colour:selColour, createdAt:new Date().toISOString() });
+  }
+  savePots(); closePotModal(); render();
+  showToast(editPotId?'✓ Pot updated':'✓ New pot created — '+name,'ok');
+}
+function deletePot(id){
+  const p=pots.find(x=>x.id===id);
+  if(!p)return;
+  const txCount=entries.filter(e=>e.potId===id).length;
+  const msg=txCount>0
+    ? `Delete "${p.name}" pot? This will also remove ${txCount} transaction(s) linked to it.`
+    : `Delete "${p.name}" pot?`;
+  if(!confirm(msg))return;
+  pots=pots.filter(x=>x.id!==id);
+  entries=entries.filter(e=>e.potId!==id);
+  savePots(); saveEntries(); render();
+  showToast('Pot deleted','warn');
+}
+
+// ── METHOD SELECT ────────────────────────────────────────
+function selectMethod(m){
+  selMethod=m;
+  ['cash','qr','credit'].forEach(k=>{
+    const el=document.getElementById('pill-'+k);
+    el.className='mpill'+(k===m?' sel-'+k:'');
+  });
+}
+
+// ── ADD ENTRY ────────────────────────────────────────────
+function addEntry(){
+  if(!pots.length){ showToast('Create a money pot first!','warn'); return; }
+  const desc=document.getElementById('entryDesc').value.trim();
+  const amt=parseFloat(document.getElementById('entryAmt').value);
+  const potId=parseInt(document.getElementById('entryPot').value);
+  if(!desc){ shakeEl('entryDesc'); return; }
+  if(!amt||amt<=0){ shakeEl('entryAmt'); return; }
+  if(!potId){ shakeEl('entryPot'); return; }
+  const pot=pots.find(p=>p.id===potId);
+  const potSpent=entries.filter(e=>e.potId===potId).reduce((s,e)=>s+e.amt,0);
+  const potRemain=pot.amount-potSpent;
+  entries.push({ id:Date.now(), date:document.getElementById('entryDate').value||new Date().toISOString(), desc, cat:document.getElementById('entryCat').value, pay:selMethod, potId, amt });
+  saveEntries();
+  document.getElementById('entryDesc').value='';
+  document.getElementById('entryAmt').value='';
+  // alert if pot is now >80%
+  const newSpent=potSpent+amt;
+  const newPct=newSpent/pot.amount*100;
+  if(newPct>=100) showToast(`⚠️ "${pot.name}" budget habis!`,'danger');
+  else if(newPct>=80) showToast(`🔔 "${pot.name}" dah 80% habis — RM ${Math.max(0,pot.amount-newSpent).toFixed(2)} lagi.`,'warn');
+  render();
+}
+function deleteEntry(id){
+  if(!confirm('Remove this transaction?'))return;
+  entries=entries.filter(e=>e.id!==id);
+  saveEntries(); render();
+}
+
+// ── FILTER ───────────────────────────────────────────────
+function setFilter(f,el){
+  filt=f;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const cr=document.getElementById('customRange');
+  f==='custom'?cr.classList.add('show'):cr.classList.remove('show');
+  if(f!=='custom')render();
+}
+function applyCustom(){cfrom=document.getElementById('dateFrom').value;cto=document.getElementById('dateTo').value;render();}
+function getFiltered(){
+  const now=new Date();
+  return entries.filter(e=>{
+    const d=new Date(e.date);
+    if(filt==='today')return d.toDateString()===now.toDateString();
+    if(filt==='week'){const s=new Date(now);s.setDate(now.getDate()-now.getDay());s.setHours(0,0,0,0);return d>=s;}
+    if(filt==='month')return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+    if(filt==='custom'&&cfrom&&cto)return d>=new Date(cfrom+'T00:00:00')&&d<=new Date(cto+'T23:59:59');
+    return true;
+  });
+}
+
+// ── SAVE ─────────────────────────────────────────────────
+function savePots(){debounceSave();}
+function saveEntries(){debounceSave();}
+
+// ── RENDER ───────────────────────────────────────────────
+function rm(n){return 'RM '+n.toFixed(2);}
+function hexToRgb(hex){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `${r},${g},${b}`;}
+
+function render(){
+  // overview
+  const totalFunds=pots.reduce((s,p)=>s+p.amount,0);
+  const totalSpent=entries.reduce((s,e)=>s+e.amt,0);
+  document.getElementById('ovTotal').textContent='RM '+totalFunds.toFixed(0);
+  document.getElementById('ovSpent').textContent='RM '+totalSpent.toFixed(0);
+  document.getElementById('ovRemain').textContent='RM '+Math.max(0,totalFunds-totalSpent).toFixed(0);
+
+  // pot dropdown
+  const potSel=document.getElementById('entryPot');
+  const prevPotVal=potSel.value;
+  potSel.innerHTML=pots.length
+    ? pots.map(p=>`<option value="${p.id}">${p.emoji} ${p.name} (RM ${p.amount.toFixed(0)})</option>`).join('')
+    : '<option value="">— No pots yet —</option>';
+  if(prevPotVal) potSel.value=prevPotVal;
+  document.getElementById('noPotWarn').style.display=pots.length?'none':'block';
+
+  // pots list
+  const pl=document.getElementById('potsList');
+  if(!pots.length){
+    pl.innerHTML=`<div class="empty-pots"><div class="empty-pots-icon">🪣</div><div class="empty-pots-text">No money pots yet.<br>Tap <strong style="color:var(--gold)">+ New Pot</strong> to create one.</div></div>`;
+  } else {
+    pl.innerHTML=pots.map(p=>{
+      const spent=entries.filter(e=>e.potId===p.id).reduce((s,e)=>s+e.amt,0);
+      const remain=p.amount-spent;
+      const pct=Math.min(spent/p.amount*100,100);
+      const leftPct=Math.max(0,100-pct);
+      const cls=pct>=100?'danger':pct>=80?'warn':'ok';
+      const barColour=pct>=100?'var(--red)':pct>=80?'var(--amber)':p.colour;
+      const rgb=hexToRgb(p.colour||'#c9a84c');
+      return `<div class="pot-card" style="border-color:rgba(${rgb},.15)">
+        <div class="pot-top-line" style="background:${p.colour||'var(--gold)'}"></div>
+        <div class="pot-header">
+          <div class="pot-name-wrap">
+            <div class="pot-emoji">${p.emoji||'💰'}</div>
+            <div class="pot-name">${p.name}</div>
+            ${p.note?`<div class="pot-source">${p.note}</div>`:''}
+          </div>
+          <div class="pot-actions">
+            <button class="pot-btn" onclick="openEditPot(${p.id})">Edit</button>
+            <button class="pot-btn del" onclick="deletePot(${p.id})">✕</button>
+          </div>
+        </div>
+        <div class="pot-amounts">
+          <div class="pot-remain ${cls}">${rm(Math.max(0,remain))}</div>
+          <div class="pot-of">of <span>${rm(p.amount)}</span></div>
+        </div>
+        <div class="pot-bar-track">
+          <div class="pot-bar-fill" style="width:${pct.toFixed(1)}%;background:${barColour}"></div>
+        </div>
+        <div class="pot-footer">
+          <span class="pot-pct-pill ${cls}">${leftPct.toFixed(0)}% remaining</span>
+          <span class="pot-spent-label">Spent <span>${rm(spent)}</span></span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // history
+  const list=getFiltered();
+  document.getElementById('histCount').textContent=list.length;
+  const tx=document.getElementById('txList');
+  if(!list.length){
+    tx.innerHTML='<div class="empty-state"><div class="empty-icon">◈</div><div class="empty-text">No transactions for this period.</div></div>';
+    return;
+  }
+  const sorted=[...list].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  tx.innerHTML=sorted.map((e,i)=>{
+    const d=new Date(e.date);
+    const ds=d.toLocaleDateString('en-MY',{day:'2-digit',month:'short'});
+    const ts=d.toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'});
+    const pot=pots.find(p=>p.id===e.potId);
+    const potColour=pot?pot.colour:'var(--gold)';
+    const potRgb=pot?hexToRgb(pot.colour||'#c9a84c'):'201,168,76';
+    const payLabel=e.pay==='cash'?'💵 Cash':e.pay==='qr'?'📱 QR':'💳 Card';
+    const ic=CAT_ICONS[e.cat]||'📌';
+    return `<div class="tx-card" style="animation-delay:${i*.025}s">
+      <div class="tx-color" style="background:${potColour}"></div>
+      <div class="tx-icon">${ic}</div>
+      <div class="tx-body">
+        <div class="tx-desc">${e.desc}</div>
+        <div class="tx-meta">
+          <span>${ds} ${ts}</span>
+          <span class="tx-tag">${e.cat}</span>
+          <span class="tx-tag">${payLabel}</span>
+          ${pot?`<span class="tx-pot-tag" style="background:rgba(${potRgb},.12);color:${potColour}">${pot.emoji} ${pot.name}</span>`:'<span class="tx-tag" style="color:var(--text3)">Pot deleted</span>'}
+        </div>
+      </div>
+      <div class="tx-right">
+        <div class="tx-amount">−RM ${e.amt.toFixed(2)}</div>
+        <button class="tx-del" onclick="deleteEntry(${e.id})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── TOAST ────────────────────────────────────────────────
+let toastT=null;
+function showToast(msg,type){
+  const t=document.getElementById('toast');
+  t.className='toast '+type+' show';
+  t.innerHTML=msg;
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>{t.classList.remove('show');t.classList.add('hide');setTimeout(()=>{t.className='toast';},320);},4000);
+}
+
+// ── HELPERS ──────────────────────────────────────────────
+function shakeEl(id){
+  const el=document.getElementById(id);
+  el.style.borderColor='var(--red)';
+  el.style.animation='shake .3s ease';
+  setTimeout(()=>{el.style.borderColor='';el.style.animation='';},900);
+}
+
+// ── CSV ──────────────────────────────────────────────────
+function exportCSV(){
+  const list=getFiltered();
+  if(!list.length){alert('Nothing to export.');return;}
+  const rows=[['Date','Description','Category','Payment','Pot','Amount (RM)']];
+  list.forEach(e=>{
+    const pot=pots.find(p=>p.id===e.potId);
+    rows.push([new Date(e.date).toLocaleString('en-MY'),e.desc,e.cat,e.pay,pot?pot.name:'—',e.amt.toFixed(2)]);
+  });
+  const csv=rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='finlo_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+function importCSV(event){
+  const file=event.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    const lines=e.target.result.split('\n').slice(1);let n=0;
+    lines.forEach(l=>{
+      const c=l.split(',').map(v=>v.replace(/^"|"$/g,'').trim());
+      if(c.length>=6&&c[5]){
+        const pot=pots.find(p=>p.name===c[4]);
+        entries.push({id:Date.now()+Math.random(),date:c[0],desc:c[1],cat:c[2],pay:c[3],potId:pot?pot.id:null,amt:parseFloat(c[5])||0});
+        n++;
+      }
+    });
+    saveEntries();render();alert('Imported '+n+' entries.');
+  };
+  r.readAsText(file);event.target.value='';
+}
+function clearAllTx(){
+  if(!confirm('Delete all transactions? Pots will remain.'))return;
+  entries=[];saveEntries();render();
+}
+
+// ── AI HELPERS ───────────────────────────────────────────
+// ── DESKTOP SIDEBAR JS ───────────────────────────────────
+let dSelMethod='cash';
+let dFilt='all', dCfrom=null, dCto=null;
+let dSmartDebounce=null, dPendingSuggestion=null;
+let dChatHistory=[];
+
+// NAV
+function dNav(section){
+  document.querySelectorAll('.d-nav-item').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.d-section').forEach(el=>el.classList.remove('active'));
+  const navEl=document.getElementById('dnav-'+section);
+  const secEl=document.getElementById('dsec-'+section);
+  if(navEl)navEl.classList.add('active');
+  if(secEl)secEl.classList.add('active');
+  // init AI chat inline if navigating to AI page
+  if(section==='ai'&&!document.getElementById('d-aiChatMessages').children.length){
+    document.getElementById('d-aiChatMessages').innerHTML='<div class="chat-msg ai">Heya! I\'m your Finlo AI advisor. Tanya apa-apa about your budget — pots, spending, forecasts. 💰</div>';
+  }
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const now=new Date();
+  // mobile
+  document.getElementById('hday').textContent=DAYS[now.getDay()];
+  document.getElementById('hnum').textContent=now.getDate();
+  // desktop sidebar date
+  document.getElementById('d-hnum').textContent=now.getDate();
+  document.getElementById('d-hday').textContent=DAYS[now.getDay()];
+  const pad=n=>String(n).padStart(2,'0');
+  const dt=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  document.getElementById('entryDate').value=dt;
+  document.getElementById('d-entryDate').value=dt;
+  buildEmojiPicker();
+  buildColourPicker();
+  render();
+});
+
+function selectMethodDesktop(m){
+  dSelMethod=m;
+  ['cash','qr','credit'].forEach(k=>{
+    const el=document.getElementById('d-pill-'+k);
+    if(el)el.className='mpill'+(k===m?' sel-'+k:'');
+  });
+}
+
+function addEntryDesktop(){
+  if(!pots.length){showToast('Create a money pot first!','warn');return;}
+  const desc=document.getElementById('d-entryDesc').value.trim();
+  const amt=parseFloat(document.getElementById('d-entryAmt').value);
+  const potId=parseInt(document.getElementById('d-entryPot').value);
+  if(!desc){shakeEl('d-entryDesc');return;}
+  if(!amt||amt<=0){shakeEl('d-entryAmt');return;}
+  if(!potId){shakeEl('d-entryPot');return;}
+  const pot=pots.find(p=>p.id===potId);
+  const potSpent=entries.filter(e=>e.potId===potId).reduce((s,e)=>s+e.amt,0);
+  entries.push({id:Date.now(),date:document.getElementById('d-entryDate').value||new Date().toISOString(),desc,cat:document.getElementById('d-entryCat').value,pay:dSelMethod,potId,amt});
+  saveEntries();
+  document.getElementById('d-entryDesc').value='';
+  document.getElementById('d-entryAmt').value='';
+  const newSpent=potSpent+amt;
+  const newPct=newSpent/pot.amount*100;
+  if(newPct>=100)showToast(`⚠️ "${pot.name}" budget habis!`,'danger');
+  else if(newPct>=80)showToast(`🔔 "${pot.name}" dah 80% — RM${Math.max(0,pot.amount-newSpent).toFixed(2)} lagi.`,'warn');
+  else showToast('✓ Spending recorded','ok');
+  render();
+  // auto navigate to dashboard after recording
+  setTimeout(()=>dNav('dashboard'),300);
+}
+
+function applyCustomDesktop(){
+  dCfrom=document.getElementById('d-dateFrom').value;
+  dCto=document.getElementById('d-dateTo').value;
+  renderDesktopHistory();
+}
+
+function onDescInputDesktop(val){
+  clearTimeout(dSmartDebounce);
+  const ss=document.getElementById('d-smartSuggestion');
+  if(val.length<3||!pots.length){ss.classList.remove('show');return;}
+  dSmartDebounce=setTimeout(()=>{
+    const cat=guessCategory(val);
+    if(!cat){ss.classList.remove('show');return;}
+    const pot=guessPot(cat);
+    dPendingSuggestion={category:cat,pot:pot?pot.name:null};
+    document.getElementById('d-smartSuggestionText').innerHTML=`<strong>✦ Smart fill:</strong> ${cat}${pot?' → '+pot.emoji+' '+pot.name:''}. Tap to apply.`;
+    ss.classList.add('show');
+  },400);
+}
+
+function applySmartSuggestionDesktop(){
+  if(!dPendingSuggestion)return;
+  const catSel=document.getElementById('d-entryCat');
+  Array.from(catSel.options).forEach((o,i)=>{if(o.value===dPendingSuggestion.category)catSel.selectedIndex=i;});
+  if(dPendingSuggestion.pot){
+    const pot=pots.find(p=>p.name===dPendingSuggestion.pot);
+    if(pot)document.getElementById('d-entryPot').value=pot.id;
+  }
+  document.getElementById('d-smartSuggestion').classList.remove('show');
+  showToast('✦ Smart fill applied!','ok');
+}
+
+function getFilteredDesktop(){
+  const now=new Date();
+  return entries.filter(e=>{
+    const d=new Date(e.date);
+    if(dFilt==='today')return d.toDateString()===now.toDateString();
+    if(dFilt==='week'){const s=new Date(now);s.setDate(now.getDate()-now.getDay());s.setHours(0,0,0,0);return d>=s;}
+    if(dFilt==='month')return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+    if(dFilt==='custom'&&dCfrom&&dCto)return d>=new Date(dCfrom+'T00:00:00')&&d<=new Date(dCto+'T23:59:59');
+    return true;
+  });
+}
+
+// Override setFilter to sync both mobile + desktop custom range
+const _origSetFilter=window.setFilter;
+window.setFilter=function(f,el){
+  filt=f; dFilt=f;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  const cr=document.getElementById('customRange');
+  const dcr=document.getElementById('d-customRange');
+  if(f==='custom'){cr&&cr.classList.add('show');dcr&&dcr.classList.add('show');}
+  else{cr&&cr.classList.remove('show');dcr&&dcr.classList.remove('show');}
+  if(f!=='custom')render();
+};
+
+function renderDesktopHistory(){
+  const list=getFilteredDesktop();
+  const countEl=document.getElementById('d-histCount');
+  if(countEl)countEl.textContent=list.length;
+  const tx=document.getElementById('d-txList');
+  if(!tx)return;
+  if(!list.length){tx.innerHTML='<div class="empty-state"><div class="empty-icon">◈</div><div class="empty-text">No transactions for this period.</div></div>';return;}
+  const sorted=[...list].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  tx.innerHTML=sorted.map((e,i)=>txCardHtml(e,i)).join('');
+}
+
+function txCardHtml(e,i){
+  const d=new Date(e.date);
+  const ds=d.toLocaleDateString('en-MY',{day:'2-digit',month:'short'});
+  const ts=d.toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'});
+  const pot=pots.find(p=>p.id===e.potId);
+  const potColour=pot?pot.colour:'var(--gold)';
+  const potRgb=pot?hexToRgb(pot.colour||'#c9a84c'):'201,168,76';
+  const payLabel=e.pay==='cash'?'💵 Cash':e.pay==='qr'?'📱 QR':'💳 Card';
+  const ic=CAT_ICONS[e.cat]||'📌';
+  return `<div class="tx-card" style="animation-delay:${i*.025}s">
+    <div class="tx-color" style="background:${potColour}"></div>
+    <div class="tx-icon">${ic}</div>
+    <div class="tx-body">
+      <div class="tx-desc">${e.desc}</div>
+      <div class="tx-meta">
+        <span>${ds} ${ts}</span>
+        <span class="tx-tag">${e.cat}</span>
+        <span class="tx-tag">${payLabel}</span>
+        ${pot?`<span class="tx-pot-tag" style="background:rgba(${potRgb},.12);color:${potColour}">${pot.emoji} ${pot.name}</span>`:'<span class="tx-tag" style="color:var(--text3)">Pot deleted</span>'}
+      </div>
+    </div>
+    <div class="tx-right">
+      <div class="tx-amount">−RM ${e.amt.toFixed(2)}</div>
+      <button class="tx-del" onclick="deleteEntry(${e.id})">✕</button>
+    </div>
+  </div>`;
+}
+
+function potCardHtml(p){
+  const spent=entries.filter(e=>e.potId===p.id).reduce((s,e)=>s+e.amt,0);
+  const remain=p.amount-spent;
+  const pct=Math.min(spent/p.amount*100,100);
+  const leftPct=Math.max(0,100-pct);
+  const cls=pct>=100?'danger':pct>=80?'warn':'ok';
+  const barColour=pct>=100?'var(--red)':pct>=80?'var(--amber)':p.colour;
+  const rgb=hexToRgb(p.colour||'#c9a84c');
+  return `<div class="pot-card" style="border-color:rgba(${rgb},.15)">
+    <div class="pot-top-line" style="background:${p.colour||'var(--gold)'}"></div>
+    <div class="pot-header">
+      <div class="pot-name-wrap">
+        <div class="pot-emoji">${p.emoji||'💰'}</div>
+        <div class="pot-name">${p.name}</div>
+        ${p.note?`<div class="pot-source">${p.note}</div>`:''}
+      </div>
+      <div class="pot-actions">
+        <button class="pot-btn" onclick="openEditPot(${p.id})">Edit</button>
+        <button class="pot-btn del" onclick="deletePot(${p.id})">✕</button>
+      </div>
+    </div>
+    <div class="pot-amounts">
+      <div class="pot-remain ${cls}">${rm(Math.max(0,remain))}</div>
+      <div class="pot-of">of <span>${rm(p.amount)}</span></div>
+    </div>
+    <div class="pot-bar-track">
+      <div class="pot-bar-fill" style="width:${pct.toFixed(1)}%;background:${barColour}"></div>
+    </div>
+    <div class="pot-footer">
+      <span class="pot-pct-pill ${cls}">${leftPct.toFixed(0)}% remaining</span>
+      <span class="pot-spent-label">Spent <span>${rm(spent)}</span></span>
+    </div>
+  </div>`;
+}
+
+// Inline AI chat on desktop AI page
+async function sendAIChatDesktop(){
+  const input=document.getElementById('d-aiChatInput');
+  const msg=input.value.trim();
+  if(!msg)return;
+  input.value='';
+  const msgsEl=document.getElementById('d-aiChatMessages');
+  msgsEl.innerHTML+=`<div class="chat-msg user">${msg}</div>`;
+  const loadId='dload-'+Date.now();
+  msgsEl.innerHTML+=`<div class="chat-msg ai" id="${loadId}"><div class="ai-loading"><div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div></div></div>`;
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+  document.getElementById('d-aiChatSend').disabled=true;
+  await fakeDelay(600+Math.random()*400);
+  const reply=generateChatReply(msg);
+  document.getElementById(loadId).innerHTML=reply;
+  dChatHistory.push({user:msg,ai:reply});
+  document.getElementById('d-aiChatSend').disabled=false;
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+}
+
+// ── PATCH RENDER TO SYNC DESKTOP ────────────────────────
+const _origRender=render;
+render=function(){
+  _origRender();
+  // overview
+  const totalFunds=pots.reduce((s,p)=>s+p.amount,0);
+  const totalSpent=entries.reduce((s,e)=>s+e.amt,0);
+  const ovT=document.getElementById('d-ovTotal');
+  const ovS=document.getElementById('d-ovSpent');
+  const ovR=document.getElementById('d-ovRemain');
+  const ovX=document.getElementById('d-ovTx');
+  if(ovT)ovT.textContent='RM '+totalFunds.toFixed(0);
+  if(ovS)ovS.textContent='RM '+totalSpent.toFixed(0);
+  if(ovR)ovR.textContent='RM '+Math.max(0,totalFunds-totalSpent).toFixed(0);
+  if(ovX)ovX.textContent=entries.length;
+
+  // pot dropdown desktop
+  const potSel=document.getElementById('d-entryPot');
+  if(potSel){
+    const prev=potSel.value;
+    potSel.innerHTML=pots.length
+      ?pots.map(p=>`<option value="${p.id}">${p.emoji} ${p.name} (RM${p.amount.toFixed(0)})</option>`).join('')
+      :'<option value="">— No pots yet —</option>';
+    if(prev)potSel.value=prev;
+  }
+  const nw=document.getElementById('d-noPotWarn');
+  if(nw)nw.style.display=pots.length?'none':'block';
+
+  // pots page
+  const pl=document.getElementById('d-potsList');
+  if(pl){
+    pl.innerHTML=pots.length
+      ?pots.map(p=>potCardHtml(p)).join('')
+      :`<div class="empty-pots"><div class="empty-pots-icon">🪣</div><div class="empty-pots-text">No money pots yet.<br>Tap <strong style="color:var(--gold)">+ New Pot</strong> to create one.</div></div>`;
+  }
+
+  // dashboard pots grid (compact, no edit buttons on dash)
+  const pd=document.getElementById('d-potsDash');
+  if(pd){
+    pd.innerHTML=pots.length
+      ?pots.map(p=>potCardHtml(p)).join('')
+      :`<div class="empty-pots"><div class="empty-pots-icon">🪣</div><div class="empty-pots-text">No pots yet. <span style="color:var(--gold);cursor:pointer" onclick="dNav('pots')">Create one →</span></div></div>`;
+  }
+
+  // recent transactions (last 5 on dashboard)
+  const rt=document.getElementById('d-recentTx');
+  if(rt){
+    const sorted=[...entries].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,5);
+    rt.innerHTML=sorted.length?sorted.map((e,i)=>txCardHtml(e,i)).join(''):'<div class="empty-state"><div class="empty-icon">◈</div><div class="empty-text">No transactions yet.</div></div>';
+  }
+
+  // history page
+  renderDesktopHistory();
+
+  // sync AI advisor text
+  const mBody=document.getElementById('aiAdvisorBody');
+  const dBody=document.getElementById('d-aiAdvisorBody');
+  if(mBody&&dBody&&mBody.innerHTML!==dBody.innerHTML)dBody.innerHTML=mBody.innerHTML;
+};
+
+function getAIData(){
+  const totalFunds=pots.reduce((s,p)=>s+p.amount,0);
+  const totalSpent=entries.reduce((s,e)=>s+e.amt,0);
+  const remain=Math.max(0,totalFunds-totalSpent);
+  const today=new Date();
+  const dayOfMonth=today.getDate();
+  const daysInMonth=new Date(today.getFullYear(),today.getMonth()+1,0).getDate();
+  const daysLeft=daysInMonth-dayOfMonth;
+
+  const potStats=pots.map(p=>{
+    const spent=entries.filter(e=>e.potId===p.id).reduce((s,e)=>s+e.amt,0);
+    const pct=p.amount>0?spent/p.amount*100:0;
+    return {...p,spent,remain:p.amount-spent,pct};
+  }).sort((a,b)=>b.pct-a.pct);
+
+  const catTotals={};
+  entries.forEach(e=>{catTotals[e.cat]=(catTotals[e.cat]||0)+e.amt;});
+  const topCats=Object.entries(catTotals).sort((a,b)=>b[1]-a[1]);
+
+  const payTotals={};
+  entries.forEach(e=>{payTotals[e.pay]=(payTotals[e.pay]||0)+e.amt;});
+  const topPay=Object.entries(payTotals).sort((a,b)=>b[1]-a[1]);
+
+  // daily burn rate from this month's entries
+  const thisMonthEntries=entries.filter(e=>{const d=new Date(e.date);return d.getMonth()===today.getMonth()&&d.getFullYear()===today.getFullYear();});
+  const monthSpent=thisMonthEntries.reduce((s,e)=>s+e.amt,0);
+  const dailyBurn=dayOfMonth>0?monthSpent/dayOfMonth:0;
+  const projectedMonthSpend=dailyBurn*daysInMonth;
+
+  return {totalFunds,totalSpent,remain,dayOfMonth,daysInMonth,daysLeft,potStats,topCats,topPay,dailyBurn,projectedMonthSpend,monthSpent,txCount:entries.length};
+}
+
+function fakeDelay(ms){return new Promise(r=>setTimeout(r,ms));}
+
+async function runAIAdvisor(){
+  if(!entries.length&&!pots.length){
+    const msg='<div style="color:var(--text3);font-size:.78rem;">Tambah dulu money pot dan rekod beberapa transaksi — then I can give you real insights! 🪣</div>';
+    document.getElementById('aiAdvisorBody').innerHTML=msg;
+    document.getElementById('d-aiAdvisorBody').innerHTML=msg;
+    return;
+  }
+  const btns=[document.getElementById('aiRefreshBtn'),document.getElementById('d-aiRefreshBtn')];
+  btns.forEach(b=>{if(b){b.disabled=true;b.textContent='Thinking…';}});
+  const loadHtml='<div class="ai-loading"><div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div><span>Analysing your finances…</span></div>';
+  document.getElementById('aiAdvisorBody').innerHTML=loadHtml;
+  document.getElementById('d-aiAdvisorBody').innerHTML=loadHtml;
+  await fakeDelay(900);
+
+  const d=getAIData();
+  const lines=[];
+  const overallPct=d.totalFunds>0?d.totalSpent/d.totalFunds*100:0;
+  if(d.totalFunds===0){
+    lines.push('Set up your money pots with a budget amount dulu — then I can start tracking properly. 💼');
+  } else if(overallPct>=100){
+    lines.push(`⚠️ Budget habis! You've spent <strong>RM${d.totalSpent.toFixed(2)}</strong> across all pots — that's <strong>${overallPct.toFixed(0)}%</strong> of your total RM${d.totalFunds.toFixed(2)} budget. Kena control sikit lepas ni.`);
+  } else if(overallPct>=80){
+    lines.push(`Heads up — you've used <strong>${overallPct.toFixed(0)}%</strong> of your total budget (RM${d.totalSpent.toFixed(2)} of RM${d.totalFunds.toFixed(2)}). Only <strong>RM${d.remain.toFixed(2)}</strong> remaining. Jaga-jaga sikit for the rest of the month.`);
+  } else {
+    lines.push(`Overall you're doing okay — spent <strong>RM${d.totalSpent.toFixed(2)}</strong> (${overallPct.toFixed(0)}%) of your RM${d.totalFunds.toFixed(2)} budget, with <strong>RM${d.remain.toFixed(2)}</strong> still available. Bagus! 👍`);
+  }
+  if(d.potStats.length){
+    const worst=d.potStats[0];
+    if(worst.pct>=100){
+      lines.push(`🔴 <strong>${worst.emoji} ${worst.name}</strong> dah habis — you've overspent by <strong>RM${(worst.spent-worst.amount).toFixed(2)}</strong>. Consider topping it up or controlling spend in this category.`);
+    } else if(worst.pct>=80){
+      lines.push(`🟡 Watch out for <strong>${worst.emoji} ${worst.name}</strong> — it's at <strong>${worst.pct.toFixed(0)}%</strong> usage with only <strong>RM${worst.remain.toFixed(2)}</strong> left. This pot needs attention.`);
+    } else {
+      const best=d.potStats[d.potStats.length-1];
+      lines.push(`✅ Your pots are in good shape. <strong>${best.emoji} ${best.name}</strong> has the most headroom with <strong>RM${best.remain.toFixed(2)}</strong> (${(100-best.pct).toFixed(0)}%) still available.`);
+    }
+  }
+  if(d.topCats.length){
+    const [topCat,topAmt]=d.topCats[0];
+    lines.push(`Your biggest spending category is <strong>${topCat}</strong> at <strong>RM${topAmt.toFixed(2)}</strong>${d.topCats.length>1?` — followed by ${d.topCats[1][0]} (RM${d.topCats[1][1].toFixed(2)})`:''}.${topCat==='Makanan/Minuman'?' Food & drink is a daily necessity, but tracking it keeps surprises away. 🍜':topCat==='Online Shopping'?' Online shopping boleh cepat terlebih — try setting a weekly limit. 📦':''}`);
+  }
+  if(d.dailyBurn>0&&d.daysLeft>0){
+    const forecast=d.monthSpent+(d.dailyBurn*d.daysLeft);
+    const remainAfter=d.totalFunds-forecast;
+    if(remainAfter<0){
+      lines.push(`📊 At your current rate of <strong>RM${d.dailyBurn.toFixed(2)}/day</strong>, you're projected to spend <strong>RM${forecast.toFixed(2)}</strong> this month — that's <strong>RM${Math.abs(remainAfter).toFixed(2)} over budget</strong>. Try to spend RM${((d.totalFunds-d.monthSpent)/d.daysLeft).toFixed(2)} or less per day from today.`);
+    } else {
+      lines.push(`📊 Burning at <strong>RM${d.dailyBurn.toFixed(2)}/day</strong>. Projected month-end spend: <strong>RM${forecast.toFixed(2)}</strong> — you should finish with <strong>RM${remainAfter.toFixed(2)}</strong> to spare. On track! 🎯`);
+    }
+  }
+
+  const html=lines.map(l=>`<p style="margin-bottom:9px;line-height:1.75;">${l}</p>`).join('');
+  document.getElementById('aiAdvisorBody').innerHTML=html;
+  document.getElementById('d-aiAdvisorBody').innerHTML=html;
+  btns.forEach(b=>{if(b){b.disabled=false;b.textContent='Refresh ↺';}});
+}
+
+// ── SMART DESCRIPTION FILL ───────────────────────────────
+let smartDebounce=null;
+let pendingSuggestion=null;
+
+const KEYWORD_MAP=[
+  {keys:['mcd','mcdonalds','kfc','pizza','burger','nasi','mee','roti','teh','kopi','mamak','makan','lunch','dinner','breakfast','bfast','food','cafe','restoran','kedai','ayam','ikan','bihun'],cat:'Makanan/Minuman'},
+  {keys:['shell','petronas','petrol','minyak','pump','ron95','ron97'],cat:'Minyak'},
+  {keys:['shopee','lazada','tiktok shop','amazon','online','order','cod','delivery'],cat:'Online Shopping'},
+  {keys:['celcom','maxis','digi','umobile','topup','top-up','reload','prepaid'],cat:'Topup Phone'},
+  {keys:['capcut','edit','video'],cat:'Capcut'},
+  {keys:['mall','parkson','aeon','mydin','giant','tesco','uniqlo','zara','h&m','beli','shopping','baju','kasut','kedai'],cat:'Physical Shopping'},
+];
+
+function guessCategory(desc){
+  const lower=desc.toLowerCase();
+  for(const{keys,cat}of KEYWORD_MAP){
+    if(keys.some(k=>lower.includes(k)))return cat;
+  }
+  return null;
+}
+
+function guessPot(cat){
+  // Find pot whose name/note loosely matches the category
+  const lower=cat.toLowerCase();
+  const keyword=lower.includes('makan')||lower.includes('minuman')?'makan':
+                lower.includes('minyak')?'minyak':
+                lower.includes('shopping')?'shopping':null;
+  if(keyword){
+    const match=pots.find(p=>(p.name+' '+(p.note||'')).toLowerCase().includes(keyword));
+    if(match)return match;
+  }
+  // fallback: pot with most remaining budget
+  const withStats=pots.map(p=>({p,rem:p.amount-entries.filter(e=>e.potId===p.id).reduce((s,e)=>s+e.amt,0)}));
+  withStats.sort((a,b)=>b.rem-a.rem);
+  return withStats[0]?.p||pots[0];
+}
+
+function onDescInput(val){
+  clearTimeout(smartDebounce);
+  const ss=document.getElementById('smartSuggestion');
+  if(val.length<3||!pots.length){ss.classList.remove('show');return;}
+  smartDebounce=setTimeout(()=>{
+    const cat=guessCategory(val);
+    if(!cat){ss.classList.remove('show');return;}
+    const pot=guessPot(cat);
+    pendingSuggestion={category:cat,pot:pot?pot.name:null};
+    document.getElementById('smartSuggestionText').innerHTML=`<strong>✦ Smart fill:</strong> ${cat}${pot?' → '+pot.emoji+' '+pot.name:''}. Tap to apply.`;
+    ss.classList.add('show');
+  },400);
+}
+
+function applySmartSuggestion(){
+  if(!pendingSuggestion)return;
+  const catSel=document.getElementById('entryCat');
+  Array.from(catSel.options).forEach((o,i)=>{if(o.value===pendingSuggestion.category)catSel.selectedIndex=i;});
+  if(pendingSuggestion.pot){
+    const pot=pots.find(p=>p.name===pendingSuggestion.pot);
+    if(pot)document.getElementById('entryPot').value=pot.id;
+  }
+  document.getElementById('smartSuggestion').classList.remove('show');
+  showToast('✦ Smart fill applied!','ok');
+}
+
+// ── AI CHAT (local smart engine) ─────────────────────────
+let chatHistory=[];
+
+function openAIChat(prefill=''){
+  chatHistory=[];
+  document.getElementById('aiChatMessages').innerHTML='<div class="chat-msg ai">Heya! I\'m your Finlo AI advisor. Tanya apa-apa about your budget, spending habits, or savings goals. 💰</div>';
+  document.getElementById('aiChatInput').value=prefill;
+  document.getElementById('aiChatModal').classList.add('open');
+  setTimeout(()=>document.getElementById('aiChatInput').focus(),200);
+  if(prefill)sendAIChat();
+}
+function closeAIChat(){document.getElementById('aiChatModal').classList.remove('open');}
+function aiChatOverlayClick(e){if(e.target===document.getElementById('aiChatModal'))closeAIChat();}
+
+function generateChatReply(msg){
+  const lower=msg.toLowerCase();
+  const d=getAIData();
+
+  // Overspending / budget check
+  if(lower.includes('overspend')||lower.includes('lebih')||lower.includes('over budget')||lower.includes('dah habis')){
+    const overPots=d.potStats.filter(p=>p.pct>=100);
+    const warnPots=d.potStats.filter(p=>p.pct>=80&&p.pct<100);
+    if(overPots.length){
+      return `Ya, ${overPots.length} pot dah habis budget: ${overPots.map(p=>`<strong>${p.emoji} ${p.name}</strong> (overspent by RM${(p.spent-p.amount).toFixed(2)})`).join(', ')}. ${warnPots.length?`Also ${warnPots.length} more pots at 80%+ — ${warnPots.map(p=>p.name).join(', ')}.`:''} Kena slow down sikit lepas ni!`;
+    } else if(warnPots.length){
+      return `Belum overspend, tapi ${warnPots.map(p=>`<strong>${p.emoji} ${p.name}</strong> (${p.pct.toFixed(0)}%)`).join(', ')} dah dekat limit. Hati-hati! 🟡`;
+    } else {
+      return `Setakat ni okay lagi — semua pots are within budget. Overall you've used <strong>${d.totalFunds>0?(d.totalSpent/d.totalFunds*100).toFixed(0):0}%</strong> of your total funds. Teruskan! ✅`;
+    }
+  }
+
+  // Pot health
+  if(lower.includes('pot health')||lower.includes('which pot')||lower.includes('pot attention')||lower.includes('pot mana')){
+    if(!d.potStats.length)return 'Belum ada pot lagi. Tambah dulu in the Pots section atas tu! 🪣';
+    const sorted=[...d.potStats].sort((a,b)=>b.pct-a.pct);
+    return `Pot health check:<br>${sorted.map(p=>{
+      const status=p.pct>=100?'🔴 Habis':p.pct>=80?'🟡 Kritikal':p.pct>=50?'🟢 Okay':'✅ Sihat';
+      return `<strong>${p.emoji} ${p.name}</strong>: ${status} — RM${p.remain.toFixed(2)} left (${(100-p.pct).toFixed(0)}% remaining)`;
+    }).join('<br>')}`;
+  }
+
+  // Save more tips
+  if(lower.includes('save')||lower.includes('tips')||lower.includes('jimat')||lower.includes('kurang spend')){
+    const tips=[];
+    if(d.topCats.length){
+      const [topCat,topAmt]=d.topCats[0];
+      tips.push(`<strong>1. Kurang ${topCat}</strong> — it's your top spend at RM${topAmt.toFixed(2)}. Try a weekly cap.`);
+    }
+    if(d.dailyBurn>0) tips.push(`<strong>2. Daily limit</strong> — you're burning RM${d.dailyBurn.toFixed(2)}/day. Try targeting RM${(d.dailyBurn*0.8).toFixed(2)}/day to save 20% more.`);
+    const payQR=d.payTotals&&d.payTotals.cash;
+    tips.push(`<strong>3. Guna QR Pay</strong> lebih — it's easier to track and some banks give cashback rewards. 📱`);
+    return tips.length?tips.join('<br><br>'):'Rekod more transactions first and I can give specific tips based on your actual spending! 📊';
+  }
+
+  // Forecast
+  if(lower.includes('forecast')||lower.includes('will i run')||lower.includes('end of month')||lower.includes('akhir bulan')){
+    if(d.dailyBurn===0)return 'Rekod some transactions this month first so I can calculate your spending rate and forecast! 📅';
+    const projected=d.monthSpent+(d.dailyBurn*d.daysLeft);
+    const gap=d.totalFunds-projected;
+    if(gap<0)return `Based on your RM${d.dailyBurn.toFixed(2)}/day burn rate, you're projected to spend <strong>RM${projected.toFixed(2)}</strong> this month — <strong>RM${Math.abs(gap).toFixed(2)} over budget</strong>. Kena reduce daily spend to RM${((d.totalFunds-d.monthSpent)/Math.max(d.daysLeft,1)).toFixed(2)}/day to stay safe. 🔴`;
+    return `At RM${d.dailyBurn.toFixed(2)}/day, projected month-end spend is <strong>RM${projected.toFixed(2)}</strong>, leaving you with <strong>RM${gap.toFixed(2)} surplus</strong>. You're on track! 🎯 ${d.daysLeft} days left in the month.`;
+  }
+
+  // Total / overview
+  if(lower.includes('total')||lower.includes('berapa')||lower.includes('how much')||lower.includes('overview')||lower.includes('summary')){
+    if(d.totalFunds===0)return 'Belum ada pot budget lagi. Set up your money pots first! 🪣';
+    return `Here\'s your summary: <strong>RM${d.totalSpent.toFixed(2)}</strong> spent out of <strong>RM${d.totalFunds.toFixed(2)}</strong> total budget. <strong>RM${d.remain.toFixed(2)}</strong> remaining across ${d.potStats.length} pot${d.potStats.length!==1?'s':''}. ${d.txCount} transactions recorded.`;
+  }
+
+  // Top category
+  if(lower.includes('category')||lower.includes('kategori')||lower.includes('most spend')||lower.includes('banyak spend')){
+    if(!d.topCats.length)return 'Belum ada transaction lagi. Rekod dulu! 📝';
+    return `Top spending categories: ${d.topCats.slice(0,3).map(([c,v],i)=>`<strong>${i+1}. ${c}</strong> (RM${v.toFixed(2)})`).join(', ')}. ${d.topCats[0][0]==='Makanan/Minuman'?'Food is life, tapi track elok-elok! 🍜':''}`;
+  }
+
+  // Greetings
+  if(lower.match(/^(hi|hello|hey|hai|helo|sup|yo)\b/)){
+    return `Hey! 👋 Glad you're here. Your budget is ${d.totalFunds>0?(d.totalSpent/d.totalFunds*100<80?'looking healthy 💚':'getting tight ⚠️'):'not set up yet'}. What do you want to know?`;
+  }
+
+  // Default fallback with context
+  const fallbacks=[
+    `Based on your data, you've spent <strong>RM${d.totalSpent.toFixed(2)}</strong> so far. Try asking: "Am I overspending?", "Give me tips to save", or "Forecast my budget".`,
+    `Hmm, tak sure apa yang you mean — try asking about your pots, spending categories, or budget forecast! Saya sedia membantu. 🤖`,
+    `I can help with: pot health check, spending analysis, budget forecast, or saving tips. Cuba tanya benda tu! 💡`,
+  ];
+  return fallbacks[Math.floor(Math.random()*fallbacks.length)];
+}
+
+async function sendAIChat(){
+  const input=document.getElementById('aiChatInput');
+  const msg=input.value.trim();
+  if(!msg)return;
+  input.value='';
+  const msgsEl=document.getElementById('aiChatMessages');
+  msgsEl.innerHTML+=`<div class="chat-msg user">${msg}</div>`;
+  const loadId='load-'+Date.now();
+  msgsEl.innerHTML+=`<div class="chat-msg ai" id="${loadId}"><div class="ai-loading"><div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div></div></div>`;
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+  document.getElementById('aiChatSend').disabled=true;
+  await fakeDelay(600+Math.random()*400);
+  const reply=generateChatReply(msg);
+  document.getElementById(loadId).innerHTML=reply;
+  chatHistory.push({user:msg,ai:reply});
+  document.getElementById('aiChatSend').disabled=false;
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+}
+</script>
+</body>
+</html>
